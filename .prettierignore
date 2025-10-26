@@ -1,0 +1,9 @@
+# Ignore TypeScript files to prevent formatting conflicts
+*.tsx
+*.ts
+*.jsx
+*.js
+
+# Keep formatting for config files
+!*.config.js
+!*.config.ts

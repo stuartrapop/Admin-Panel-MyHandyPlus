@@ -1,0 +1,508 @@
+import { Alert, Box, Card, CardContent, CircularProgress, Typography } from '@mui/material';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { useEffect, useRef, useState } from 'react';
+import { Title } from 'react-admin';
+import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet';
+import { supabase } from '../supabaseClient';
+
+// Fix for default marker icon in React-Leaflet
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+const DefaultIcon = L.icon({
+	iconUrl: icon,
+	shadowUrl: iconShadow,
+	iconSize: [25, 41],
+	iconAnchor: [12, 41],
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Define the user type matching the view
+interface UserLocationRaw {
+	id: string;
+	city: string | null;
+	country: string | null;
+	location_point: string | { coordinates: [number, number]; }; // PostGIS point in WKT format or GeoJSON
+	gender: string | null;
+	account_status: string;
+	registration_month: string;
+}
+
+interface UserLocation {
+	id: string;
+	city: string | null;
+	country: string | null;
+	latitude: number;
+	longitude: number;
+	gender: string | null;
+	account_status: string;
+	registration_month: string;
+}
+
+interface UserDetails {
+	id: string;
+	firstname: string;
+	email: string;
+	city: string | null;
+	country: string | null;
+	gender: string | null;
+	account_status: string;
+	avatar_url: string | null;
+}
+
+// Helper function to parse PostGIS POINT string to lat/lng
+const parsePoint = (pointStr: string | { coordinates: [number, number]; }): { latitude: number; longitude: number; } | null => {
+	try {
+		if (typeof pointStr === 'string') {
+			// Handle EWKB format (hex string starting with 0101000020)
+			if (pointStr.startsWith('0101000020')) {
+				// EWKB Point format:
+				// 01 = byte order (little endian)
+				// 01000020 = geometry type (Point with SRID)
+				// E6100000 = SRID (4326 for WGS84)
+				// Next 8 bytes = X coordinate (longitude) as double
+				// Next 8 bytes = Y coordinate (latitude) as double
+
+				const hex = pointStr.slice(18); // Skip header (01 + 01000020 + E6100000 = 18 chars)
+
+				// Extract longitude (first 16 hex chars = 8 bytes)
+				const lonHex = hex.slice(0, 16);
+				const lonBytes = new Uint8Array(8);
+				for (let i = 0; i < 8; i++) {
+					lonBytes[i] = parseInt(lonHex.slice(i * 2, i * 2 + 2), 16);
+				}
+				const longitude = new DataView(lonBytes.buffer).getFloat64(0, true);
+
+				// Extract latitude (next 16 hex chars = 8 bytes)
+				const latHex = hex.slice(16, 32);
+				const latBytes = new Uint8Array(8);
+				for (let i = 0; i < 8; i++) {
+					latBytes[i] = parseInt(latHex.slice(i * 2, i * 2 + 2), 16);
+				}
+				const latitude = new DataView(latBytes.buffer).getFloat64(0, true);
+
+				return { latitude, longitude };
+			}
+
+			// Handle WKT format: "POINT(lng lat)"
+			const match = pointStr.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
+			if (match) {
+				const longitude = parseFloat(match[1]);
+				const latitude = parseFloat(match[2]);
+				return { latitude, longitude };
+			}
+		}
+
+		// Handle if it's already parsed as a GeoJSON object
+		if (typeof pointStr === 'object' && pointStr !== null && 'coordinates' in pointStr) {
+			if (Array.isArray(pointStr.coordinates) && pointStr.coordinates.length === 2) {
+				// GeoJSON format: [longitude, latitude]
+				return {
+					longitude: pointStr.coordinates[0],
+					latitude: pointStr.coordinates[1]
+				};
+			}
+		}
+		return null;
+	} catch (error) {
+		console.error('Error parsing point:', pointStr, error);
+		return null;
+	}
+};
+
+// Color mapping for different genders
+const getMarkerColor = (gender: string | null): string => {
+	switch (gender?.toLowerCase()) {
+		case 'male':
+			return '#1976d2'; // Blue
+		case 'female':
+			return '#e91e63'; // Pink
+		case 'non_binary':
+			return '#9c27b0'; // Purple
+		default:
+			return '#757575'; // Gray
+	}
+};
+
+// UserPopup component - fetches details on demand
+const UserPopup: React.FC<{ userId: string }> = ({ userId }) => {
+	const [details, setDetails] = useState<UserDetails | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		const fetchUserDetails = async () => {
+			try {
+				setLoading(true);
+				setError(null);
+
+				const { data, error: rpcError } = await supabase
+					.rpc('get_user_map_details', { user_id: userId });
+
+				if (rpcError) throw rpcError;
+
+				if (data && data.length > 0) {
+					setDetails(data[0]);
+				} else {
+					setError('User not found');
+				}
+			} catch (err) {
+				console.error('Error fetching user details:', err);
+				setError('Failed to load user details');
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		fetchUserDetails();
+	}, [userId]);
+
+	if (loading) {
+		return (
+			<Box display="flex" justifyContent="center" p={2}>
+				<CircularProgress size={24} />
+			</Box>
+		);
+	}
+
+	if (error || !details) {
+		return (
+			<Box p={1}>
+				<Typography variant="body2" color="error">
+					{error || 'User not found'}
+				</Typography>
+			</Box>
+		);
+	}
+
+	return (
+		<Box sx={{ minWidth: 200 }}>
+			{/* Avatar */}
+			{details.avatar_url && (
+				<Box mb={1} display="flex" justifyContent="center">
+					<img
+						src={details.avatar_url}
+						alt={details.firstname}
+						style={{
+							width: 80,
+							height: 80,
+							borderRadius: '50%',
+							objectFit: 'cover'
+						}}
+					/>
+				</Box>
+			)}
+			
+			{/* User Info */}
+			<Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+				{details.firstname}
+			</Typography>
+			<Typography variant="body2" sx={{ mb: 0.5 }}>
+				<strong>Email:</strong> {details.email || 'Not available'}
+			</Typography>
+			<Typography variant="body2" sx={{ mb: 0.5 }}>
+				<strong>Location:</strong> {details.city || 'Unknown'}, {details.country || 'Unknown'}
+			</Typography>
+			<Typography variant="body2" sx={{ mb: 0.5 }}>
+				<strong>Gender:</strong> {details.gender || 'Not specified'}
+			</Typography>
+			<Typography variant="body2" sx={{ mb: 0.5 }}>
+				<strong>Status:</strong> {details.account_status}
+			</Typography>
+			<Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+				ID: {details.id}
+			</Typography>
+		</Box>
+	);
+};
+
+const UserMapPage = () => {
+	const [users, setUsers] = useState<UserLocation[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const [stats, setStats] = useState({
+		total: 0,
+		male: 0,
+		female: 0,
+		non_binary: 0,
+		other: 0,
+	});
+
+	// Prevent duplicate fetches in React Strict Mode
+	const hasFetched = useRef(false);
+
+	useEffect(() => {
+		if (!hasFetched.current) {
+			hasFetched.current = true;
+			fetchUserLocations();
+		}
+	}, []);
+
+	const fetchUserLocations = async () => {
+		try {
+			setLoading(true);
+			setError(null);
+
+			// Performance monitoring
+			const perfStart = performance.now();
+			console.log('🚀 Starting to fetch all users...');
+
+			// Fetch ALL users by paginating through results (0-7 pages = 8000 users max)
+			let allUsers: UserLocation[] = [];
+			const pageSize = 1000;
+			const maxPages = 8; // Fetch pages 0-7
+
+			let totalFetchTime = 0;
+			let totalParseTime = 0;
+			let parseErrorCount = 0;
+
+			// Fetch 8 pages (0-7) as per your SQL example
+			for (let page = 0; page < maxPages; page++) {
+				const pageStart = performance.now();
+
+				const { data, error: fetchError } = await supabase
+					.from('admin_user_map_distribution')
+					.select('*')
+					.range(page * pageSize, (page + 1) * pageSize - 1);
+
+				const fetchTime = performance.now() - pageStart;
+				totalFetchTime += fetchTime;
+
+				if (fetchError) {
+					console.error('Error fetching user locations:', fetchError);
+					setError(fetchError.message);
+					return;
+				}
+
+				if (data && data.length > 0) {
+					const parseStart = performance.now();
+
+					// Parse location_point to extract latitude and longitude
+					const parsedUsers = data
+						.map((rawUser: UserLocationRaw) => {
+							const coords = parsePoint(rawUser.location_point);
+							if (!coords) {
+								parseErrorCount++;
+								console.warn(`Could not parse location for user ${rawUser.id}:`, rawUser.location_point);
+								return null;
+							}
+						// Create UserLocation object without location_point
+						const userLocation: UserLocation = {
+							id: rawUser.id,
+							city: rawUser.city,
+							country: rawUser.country,
+							latitude: coords.latitude,
+							longitude: coords.longitude,
+							gender: rawUser.gender,
+							account_status: rawUser.account_status,
+							registration_month: rawUser.registration_month,
+						};
+							return userLocation;
+						})
+						.filter((user): user is UserLocation => user !== null);
+
+					const parseTime = performance.now() - parseStart;
+					totalParseTime += parseTime;
+
+					allUsers = [...allUsers, ...parsedUsers];
+					console.log(
+						`📍 Page ${page}: ` +
+						`Fetched ${data.length} records in ${fetchTime.toFixed(2)}ms, ` +
+						`Parsed ${parsedUsers.length} users in ${parseTime.toFixed(2)}ms ` +
+						`(total: ${allUsers.length})`
+					);
+
+					// If we got less than pageSize, no more data
+					if (data.length < pageSize) {
+						console.log(`Reached end of data at page ${page}`);
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+
+			const totalTime = performance.now() - perfStart;
+
+			console.log('\n📊 Performance Summary:');
+			console.log(`├─ Total time: ${totalTime.toFixed(2)}ms (${(totalTime / 1000).toFixed(2)}s)`);
+			console.log(`├─ Fetch time: ${totalFetchTime.toFixed(2)}ms (${((totalFetchTime / totalTime) * 100).toFixed(1)}%)`);
+			console.log(`├─ Parse time: ${totalParseTime.toFixed(2)}ms (${((totalParseTime / totalTime) * 100).toFixed(1)}%)`);
+			console.log(`├─ Avg fetch per page: ${(totalFetchTime / maxPages).toFixed(2)}ms`);
+			console.log(`├─ Avg parse per page: ${(totalParseTime / maxPages).toFixed(2)}ms`);
+			console.log(`├─ Total users: ${allUsers.length}`);
+			console.log(`├─ Parse errors: ${parseErrorCount}`);
+			console.log(`└─ Parse rate: ${(allUsers.length / (totalParseTime / 1000)).toFixed(0)} users/sec`);
+			console.log(`✅ Finished fetching ${allUsers.length} users with locations`);
+
+			if (allUsers.length > 0) {
+				setUsers(allUsers);
+
+				// Calculate stats
+				const stats = {
+					total: allUsers.length,
+					male: allUsers.filter(u => u.gender?.toLowerCase() === 'male').length,
+					female: allUsers.filter(u => u.gender?.toLowerCase() === 'female').length,
+					non_binary: allUsers.filter(u => u.gender?.toLowerCase() === 'non_binary').length,
+					other: allUsers.filter(u => !u.gender || !['male', 'female', 'non_binary'].includes(u.gender.toLowerCase())).length,
+				};
+				setStats(stats);
+			}
+		} catch (err) {
+			console.error('Error:', err);
+			setError(err instanceof Error ? err.message : 'Unknown error');
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	if (loading) {
+		return (
+			<Card>
+				<Title title="User Map" />
+				<CardContent>
+					<Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px" gap={2}>
+						<CircularProgress />
+						<Typography variant="body2" color="textSecondary">
+							Loading user locations...
+						</Typography>
+					</Box>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (error) {
+		return (
+			<Card>
+				<Title title="User Map" />
+				<CardContent>
+					<Alert severity="error">
+						Error loading user locations: {error}
+					</Alert>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	return (
+		<Card>
+			<Title title="User Geographic Distribution" />
+			<CardContent>
+				{/* Info Banner */}
+				{stats.total > 0 && (
+					<Alert severity="info" sx={{ mb: 2 }}>
+						Displaying <strong>{stats.total.toLocaleString()}</strong> users with valid location data.
+						{stats.total === 1000 && " (Note: May be limited to 1000 - check console logs)"}
+					</Alert>
+				)}
+
+				{/* Stats Summary */}
+				<Box mb={2} display="flex" gap={3} flexWrap="wrap">
+					<Box>
+						<Typography variant="caption" color="textSecondary">Total Users</Typography>
+						<Typography variant="h6">{stats.total.toLocaleString()}</Typography>
+					</Box>
+					<Box>
+						<Typography variant="caption" color="textSecondary">Male</Typography>
+						<Typography variant="h6" color="#1976d2">{stats.male.toLocaleString()}</Typography>
+					</Box>
+					<Box>
+						<Typography variant="caption" color="textSecondary">Female</Typography>
+						<Typography variant="h6" color="#e91e63">{stats.female.toLocaleString()}</Typography>
+					</Box>
+					<Box>
+						<Typography variant="caption" color="textSecondary">Non-Binary</Typography>
+						<Typography variant="h6" color="#9c27b0">{stats.non_binary.toLocaleString()}</Typography>
+					</Box>
+					{stats.other > 0 && (
+						<Box>
+							<Typography variant="caption" color="textSecondary">Other/Unknown</Typography>
+							<Typography variant="h6" color="#757575">{stats.other.toLocaleString()}</Typography>
+						</Box>
+					)}
+				</Box>
+
+				{/* Map Container */}
+				<Box height="70vh" width="100%" borderRadius={1} overflow="hidden">
+					<MapContainer
+						center={[20, 0]} // Center of world
+						zoom={2}
+						style={{ height: '100%', width: '100%' }}
+						scrollWheelZoom={true}
+					>
+						{/* Base map tiles from OpenStreetMap */}
+						<TileLayer
+							attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+							url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+						/>
+
+						{/* User markers */}
+						{users.map((user) => (
+							<CircleMarker
+								key={user.id}
+								center={[user.latitude, user.longitude]}
+								radius={6}
+								fillColor={getMarkerColor(user.gender)}
+								color="#fff"
+								weight={1}
+								opacity={0.8}
+								fillOpacity={0.6}
+						>
+							<Popup>
+								<Box>
+									<Typography variant="subtitle2" sx={{ mb: 1 }}>
+										<strong>{user.name || 'Unknown User'}</strong>
+									</Typography>
+									<Typography variant="body2">
+										<strong>Email:</strong> {user.email || 'Not available'}
+									</Typography>
+									<Typography variant="body2" sx={{ mt: 0.5 }}>
+										<strong>Location:</strong> {user.city || 'Unknown'}, {user.country || 'Unknown'}
+									</Typography>
+									<Typography variant="body2">
+										<strong>Gender:</strong> {user.gender || 'Not specified'}
+									</Typography>
+									<Typography variant="body2">
+										<strong>Status:</strong> {user.account_status}
+									</Typography>
+									<Typography variant="body2">
+										<strong>Registered:</strong> {user.registration_month}
+									</Typography>
+									<Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+										ID: {user.id}
+									</Typography>
+								</Box>
+							</Popup>
+							</CircleMarker>
+						))}
+					</MapContainer>
+				</Box>
+
+				{/* Legend */}
+				<Box mt={2} display="flex" gap={3} flexWrap="wrap" justifyContent="center">
+					<Box display="flex" alignItems="center" gap={1}>
+						<Box width={16} height={16} borderRadius="50%" bgcolor="#1976d2" />
+						<Typography variant="body2">Male</Typography>
+					</Box>
+					<Box display="flex" alignItems="center" gap={1}>
+						<Box width={16} height={16} borderRadius="50%" bgcolor="#e91e63" />
+						<Typography variant="body2">Female</Typography>
+					</Box>
+					<Box display="flex" alignItems="center" gap={1}>
+						<Box width={16} height={16} borderRadius="50%" bgcolor="#9c27b0" />
+						<Typography variant="body2">Non-Binary</Typography>
+					</Box>
+					<Box display="flex" alignItems="center" gap={1}>
+						<Box width={16} height={16} borderRadius="50%" bgcolor="#757575" />
+						<Typography variant="body2">Unknown</Typography>
+					</Box>
+				</Box>
+			</CardContent>
+		</Card>
+	);
+};
+
+export default UserMapPage;
