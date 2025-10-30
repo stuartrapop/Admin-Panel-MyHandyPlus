@@ -1,8 +1,9 @@
-import { Alert, Box, Card, CardContent, CircularProgress, Typography } from '@mui/material';
+import PersonIcon from '@mui/icons-material/Person';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Typography } from '@mui/material';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef, useState } from 'react';
-import { Title } from 'react-admin';
+import { Title, useRedirect } from 'react-admin';
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { supabase } from '../supabaseClient';
@@ -181,6 +182,7 @@ const UserPopup: React.FC<UserPopupProps> = ({ userId }) => {
 	const [error, setError] = useState<string | null>(null);
 	const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 	const [photoLoading, setPhotoLoading] = useState(false);
+	const redirect = useRedirect();
 
 	useEffect(() => {
 		const fetchUserDetails = async () => {
@@ -379,9 +381,21 @@ const UserPopup: React.FC<UserPopupProps> = ({ userId }) => {
 						{details.account_status}
 					</span>
 				</div>
-				<div style={{ fontSize: '12px', color: '#999', marginTop: '12px' }}>
+				<div style={{ fontSize: '12px', color: '#999', marginTop: '12px', marginBottom: '12px' }}>
 					ID: {details.id}
 				</div>
+
+				{/* View Profile Button */}
+				<Button
+					variant="contained"
+					color="primary"
+					startIcon={<PersonIcon />}
+					fullWidth
+					onClick={() => redirect('show', 'profiles', details.id)}
+					sx={{ mt: 1 }}
+				>
+					View Profile
+				</Button>
 			</div>
 		</div>
 	);

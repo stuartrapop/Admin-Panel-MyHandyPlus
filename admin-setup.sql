@@ -93,7 +93,19 @@ SELECT
             SELECT 1 FROM user_account_status uas
             WHERE uas.user_id = p.id AND uas.status = 'paused'
         )
-    ) as paused_users
+    ) as paused_users,
+    COUNT(DISTINCT p.id) FILTER (
+        WHERE EXISTS (
+            SELECT 1 FROM user_account_status uas
+            WHERE uas.user_id = p.id AND uas.status = 'incomplete'
+        )
+    ) as incomplete_users,
+    COUNT(DISTINCT p.id) FILTER (
+        WHERE EXISTS (
+            SELECT 1 FROM user_account_status uas
+            WHERE uas.user_id = p.id AND uas.status = 'under_review'
+        )
+    ) as under_review_users
 FROM profiles p;
 
 COMMENT ON VIEW admin_user_stats IS
@@ -297,6 +309,8 @@ SELECT
     (SELECT active_users FROM admin_user_stats) as active_users,
     (SELECT tester_users FROM admin_user_stats) as tester_users,
     (SELECT paused_users FROM admin_user_stats) as paused_users,
+    (SELECT incomplete_users FROM admin_user_stats) as incomplete_users,
+    (SELECT under_review_users FROM admin_user_stats) as under_review_users,
     -- Active user metrics
     (SELECT active_users_last_2_months FROM admin_active_users) as active_last_2_months,
     (SELECT active_users_last_week FROM admin_active_users) as active_last_week,
@@ -700,7 +714,7 @@ CREATE OR REPLACE FUNCTION search_profiles(
   search_name TEXT DEFAULT NULL,
   search_email TEXT DEFAULT NULL,
   filter_gender TEXT DEFAULT NULL,  -- 'male', 'female', 'non_binary'
-  filter_status TEXT DEFAULT NULL,  -- 'active', 'paused', 'banned', 'inactive', 'tester'
+  filter_status TEXT DEFAULT NULL,  -- 'active', 'paused', 'banned', 'inactive', 'tester', 'incomplete', 'under_review'
   sort_field TEXT DEFAULT 'created_at',
   sort_order TEXT DEFAULT 'DESC',
   page_limit INTEGER DEFAULT 10,
@@ -720,8 +734,8 @@ RETURNS TABLE (
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
   email VARCHAR(255),
-  account_status TEXT,
-  gender_value TEXT,
+  status TEXT,  -- Changed from account_status to status for React-Admin
+  gender TEXT,  -- Changed from gender_value to gender for React-Admin
   total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -755,8 +769,11 @@ BEGIN
   FROM public.profiles p
   LEFT JOIN auth.users u ON p.id = u.id
   LEFT JOIN public.user_account_status uas ON p.id = uas.user_id
-  LEFT JOIN public.profile_attributes pa_gender ON p.id = pa_gender.profile_id
-    AND pa_gender.attribute_id IN (0, 1, 2) -- gender attributes
+  LEFT JOIN (
+    SELECT pa.profile_id, pa.attribute_id
+    FROM public.profile_attributes pa
+    WHERE pa.attribute_id IN (0, 1, 2)
+  ) pa_gender ON p.id = pa_gender.profile_id
   WHERE
     -- Firstname filter: prefix match (starts with) when 3+ chars
     (search_firstname IS NULL OR LENGTH(search_firstname) < 3 OR p.firstname ILIKE search_firstname || '%')
@@ -764,58 +781,89 @@ BEGIN
     AND (search_name IS NULL OR LENGTH(search_name) < 3 OR p.name ILIKE search_name || '%')
     -- Email filter: prefix match (starts with) when 3+ chars
     AND (search_email IS NULL OR LENGTH(search_email) < 3 OR u.email ILIKE search_email || '%')
-    -- Gender filter
+    -- Gender filter - check if user has the specific gender attribute
     AND (gender_attribute_id IS NULL OR pa_gender.attribute_id = gender_attribute_id)
-    -- Status filter
+    -- Status filter - check user_account_status table
     AND (filter_status IS NULL OR COALESCE(uas.status, 'active') = filter_status);
 
   -- Return paginated results with all profile data
   RETURN QUERY
-  SELECT DISTINCT ON (p.id)
-    p.id,
-    p.firstname,
-    p.name,
-    p.birthdate,
-    p.bio,
-    p.profession,
-    p.declared_country,
-    p.declared_city,
-    p.declared_location,
-    p.location_verified,
-    p.created_at,
-    p.updated_at,
-    u.email,
-    COALESCE(uas.status, 'active') AS account_status,
-    ta.value AS gender_value,
+  WITH ranked_profiles AS (
+    SELECT
+      p.id,
+      p.firstname,
+      p.name,
+      p.birthdate,
+      p.bio,
+      p.profession,
+      p.declared_country,
+      p.declared_city,
+      p.declared_location,
+      p.location_verified,
+      p.created_at,
+      p.updated_at,
+      u.email,
+      COALESCE(uas.status, 'active') AS status,
+      ta.value AS gender,
+      -- Add row number to handle duplicates
+      ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY ta.value NULLS LAST) as rn
+    FROM public.profiles p
+    LEFT JOIN auth.users u ON p.id = u.id
+    LEFT JOIN public.user_account_status uas ON p.id = uas.user_id
+    LEFT JOIN (
+      SELECT pa.profile_id, pa.attribute_id
+      FROM public.profile_attributes pa
+      WHERE pa.attribute_id IN (0, 1, 2)
+    ) pa_gender ON p.id = pa_gender.profile_id
+    LEFT JOIN public.types_attributes ta ON pa_gender.attribute_id = ta.id
+    WHERE
+      -- Firstname filter: prefix match (starts with) when 3+ chars
+      (search_firstname IS NULL OR LENGTH(search_firstname) < 3 OR p.firstname ILIKE search_firstname || '%')
+      -- Name filter: prefix match (starts with) when 3+ chars
+      AND (search_name IS NULL OR LENGTH(search_name) < 3 OR p.name ILIKE search_name || '%')
+      -- Email filter: prefix match (starts with) when 3+ chars
+      AND (search_email IS NULL OR LENGTH(search_email) < 3 OR u.email ILIKE search_email || '%')
+      -- Gender filter
+      AND (gender_attribute_id IS NULL OR pa_gender.attribute_id = gender_attribute_id)
+      -- Status filter
+      AND (filter_status IS NULL OR COALESCE(uas.status, 'active') = filter_status)
+  )
+  SELECT
+    rp.id,
+    rp.firstname,
+    rp.name,
+    rp.birthdate,
+    rp.bio,
+    rp.profession,
+    rp.declared_country,
+    rp.declared_city,
+    rp.declared_location,
+    rp.location_verified,
+    rp.created_at,
+    rp.updated_at,
+    rp.email,
+    rp.status,
+    rp.gender,
     total_records AS total_count
-  FROM public.profiles p
-  LEFT JOIN auth.users u ON p.id = u.id
-  LEFT JOIN public.user_account_status uas ON p.id = uas.user_id
-  LEFT JOIN public.profile_attributes pa_gender ON p.id = pa_gender.profile_id
-    AND pa_gender.attribute_id IN (0, 1, 2)
-  LEFT JOIN public.types_attributes ta ON pa_gender.attribute_id = ta.id
-  WHERE
-    -- Firstname filter: prefix match (starts with) when 3+ chars
-    (search_firstname IS NULL OR LENGTH(search_firstname) < 3 OR p.firstname ILIKE search_firstname || '%')
-    -- Name filter: prefix match (starts with) when 3+ chars
-    AND (search_name IS NULL OR LENGTH(search_name) < 3 OR p.name ILIKE search_name || '%')
-    -- Email filter: prefix match (starts with) when 3+ chars
-    AND (search_email IS NULL OR LENGTH(search_email) < 3 OR u.email ILIKE search_email || '%')
-    -- Gender filter
-    AND (gender_attribute_id IS NULL OR pa_gender.attribute_id = gender_attribute_id)
-    -- Status filter
-    AND (filter_status IS NULL OR COALESCE(uas.status, 'active') = filter_status)
+  FROM ranked_profiles rp
+  WHERE rp.rn = 1  -- Only take first row per profile (eliminates duplicates)
   ORDER BY
-    p.id,
     CASE
-      WHEN sort_field = 'firstname' AND sort_order = 'ASC' THEN p.firstname
-      WHEN sort_field = 'firstname' AND sort_order = 'DESC' THEN p.firstname
-      WHEN sort_field = 'name' AND sort_order = 'ASC' THEN p.name
-      WHEN sort_field = 'name' AND sort_order = 'DESC' THEN p.name
-      WHEN sort_field = 'created_at' AND sort_order = 'ASC' THEN p.created_at::TEXT
-      WHEN sort_field = 'created_at' AND sort_order = 'DESC' THEN p.created_at::TEXT
-      ELSE p.created_at::TEXT
-    END ASC
+      WHEN sort_field = 'firstname' AND sort_order = 'ASC' THEN rp.firstname
+      WHEN sort_field = 'name' AND sort_order = 'ASC' THEN rp.name
+      WHEN sort_field = 'email' AND sort_order = 'ASC' THEN rp.email
+      WHEN sort_field = 'status' AND sort_order = 'ASC' THEN rp.status
+      WHEN sort_field = 'created_at' AND sort_order = 'ASC' THEN rp.created_at::TEXT
+      ELSE NULL
+    END ASC NULLS LAST,
+    CASE
+      WHEN sort_field = 'firstname' AND sort_order = 'DESC' THEN rp.firstname
+      WHEN sort_field = 'name' AND sort_order = 'DESC' THEN rp.name
+      WHEN sort_field = 'email' AND sort_order = 'DESC' THEN rp.email
+      WHEN sort_field = 'status' AND sort_order = 'DESC' THEN rp.status
+      WHEN sort_field = 'created_at' AND sort_order = 'DESC' THEN rp.created_at::TEXT
+      ELSE rp.created_at::TEXT
+    END DESC NULLS LAST
   LIMIT page_limit
   OFFSET page_offset;
 END;
@@ -823,7 +871,7 @@ $$;
 
 -- Add helpful comment
 COMMENT ON FUNCTION search_profiles IS
-'Comprehensive profile search function supporting firstname, name, email, gender, and status filters with pagination. Admin/Moderator only.';
+'Comprehensive profile search function supporting firstname, name, email, gender, and status filters with pagination. Returns status and gender columns for React-Admin. Admin/Moderator only.';
 
 
 -- =============================================================================
@@ -870,8 +918,11 @@ BEGIN
   FROM public.profiles p
   LEFT JOIN auth.users u ON p.id = u.id
   LEFT JOIN public.user_account_status uas ON p.id = uas.user_id
-  LEFT JOIN public.profile_attributes pa_gender ON p.id = pa_gender.profile_id
-    AND pa_gender.attribute_id IN (0, 1, 2)
+  LEFT JOIN (
+    SELECT pa.profile_id, pa.attribute_id
+    FROM public.profile_attributes pa
+    WHERE pa.attribute_id IN (0, 1, 2)
+  ) pa_gender ON p.id = pa_gender.profile_id
   WHERE
     (search_firstname IS NULL OR LENGTH(search_firstname) < 3 OR p.firstname ILIKE search_firstname || '%')
     AND (search_name IS NULL OR LENGTH(search_name) < 3 OR p.name ILIKE search_name || '%')

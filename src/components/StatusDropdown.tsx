@@ -1,5 +1,5 @@
 import { Box, CircularProgress, FormControl, InputLabel, MenuItem, Select } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNotify, useRecordContext, useRefresh } from "react-admin";
 import { supabase } from "../supabaseClient";
 
@@ -8,7 +8,31 @@ export const StatusDropdown = () => {
 	const notify = useNotify();
 	const refresh = useRefresh();
 	const [loading, setLoading] = useState(false);
-	const [currentStatus, setCurrentStatus] = useState(record?.account_status || 'active');
+	const [currentStatus, setCurrentStatus] = useState<string>('active');
+
+	// Fetch the actual status from the database
+	useEffect(() => {
+		const fetchStatus = async () => {
+			if (!record?.id) return;
+
+			const { data, error } = await supabase
+				.from('user_account_status')
+				.select('status')
+				.eq('user_id', record.id)
+				.single();
+
+			if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+				console.error('Error fetching status:', error);
+			} else if (data) {
+				setCurrentStatus(data.status);
+			} else {
+				// No status record exists, default to active
+				setCurrentStatus('active');
+			}
+		};
+
+		fetchStatus();
+	}, [record?.id]);
 
 	const handleStatusChange = async (newStatus: string) => {
 		if (!record?.id) return;
@@ -60,6 +84,8 @@ export const StatusDropdown = () => {
 		banned: '#d32f2f',
 		inactive: '#757575',
 		tester: '#0288d1',
+		incomplete: '#ed6c02',
+		under_review: '#0288d1',
 	};
 
 	return (
@@ -82,6 +108,8 @@ export const StatusDropdown = () => {
 					<MenuItem value="banned">Banned</MenuItem>
 					<MenuItem value="inactive">Inactive</MenuItem>
 					<MenuItem value="tester">Tester</MenuItem>
+					<MenuItem value="incomplete">Incomplete</MenuItem>
+					<MenuItem value="under_review">Under Review</MenuItem>
 				</Select>
 			</FormControl>
 			{loading && <CircularProgress size={20} />}

@@ -28,6 +28,8 @@ interface DashboardStats {
 	active_users: number;
 	tester_users: number;
 	paused_users: number;
+	incomplete_users: number;
+	under_review_users: number;
 	active_last_2_months: number;
 	active_last_week: number;
 	active_last_month: number;

@@ -19,8 +19,11 @@ import {
 	useGetList,
 	useRecordContext,
 } from "react-admin";
+import { CustomPagination } from "../components/CustomPagination";
+import { DeleteUserButton } from "../components/DeleteUserButton";
 import { EmailField } from "../components/EmailField";
 import { GalleryPhotos } from "../components/GalleryPhotos";
+import { GenderDropdown } from "../components/GenderDropdown";
 import { GenderField } from "../components/GenderField";
 import { ProfilePhotoField } from "../components/ProfilePhotoField";
 import { StatusDropdown } from "../components/StatusDropdown";
@@ -57,6 +60,8 @@ const profileFilters = [
 			{ id: 'banned', name: 'Banned' },
 			{ id: 'inactive', name: 'Inactive' },
 			{ id: 'tester', name: 'Tester' },
+			{ id: 'incomplete', name: 'Incomplete' },
+			{ id: 'under_review', name: 'Under Review' },
 		]}
 		alwaysOn
 	/>,
@@ -74,19 +79,27 @@ const profileFilters = [
 ];
 
 export const ProfilesList = () => (
-	<List filters={profileFilters} disableSyncWithLocation>
+	<List
+		perPage={25}
+		filters={profileFilters}
+		sort={{ field: 'created_at', order: 'DESC' }}
+		pagination={<CustomPagination />}
+	>
 		<Datagrid rowClick="show">
-			<TextField source="id" label="ID" />
+
 			<ProfilePhotoField label="Photo" />
 			<TextField source="firstname" label="First Name" />
 			<TextField source="name" label="Full Name" />
+			<TextField source="gender" label="Gender" />
 			<EmailField label="Email" />
 
-			{/* Account Status - comes directly from RPC function */}
+			{/* Account Status - comes directly from RPC function as 'status' */}
 			<FunctionField
 				label="Status"
-				render={(record: { account_status?: string; }) => {
-					if (!record?.account_status || record.account_status === 'unknown') {
+				source="status"
+				sortable={true}
+				render={(record: { status?: string; }) => {
+					if (!record?.status || record.status === 'unknown') {
 						return <Chip label="Unknown" size="small" color="default" />;
 					}
 
@@ -96,38 +109,21 @@ export const ProfilesList = () => (
 						banned: "error",
 						inactive: "default",
 						tester: "info",
+						incomplete: "warning",
+						under_review: "info",
 					};
 
 					return (
 						<Chip
-							label={record.account_status.charAt(0).toUpperCase() + record.account_status.slice(1)}
+							label={record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}
 							size="small"
-							color={statusColors[record.account_status] || "default"}
+							color={statusColors[record.status] || "default"}
 						/>
 					);
 				}}
 			/>
-
-			{/* Reference to user_presence to show presence info */}
-			<ReferenceField
-				source="id"
-				reference="user_presence"
-				label="Online"
-				link={false}
-			>
-				<BooleanField source="is_online" />
-			</ReferenceField>
-
-			<ReferenceField
-				source="id"
-				reference="user_presence"
-				label="Last Seen"
-				link={false}
-			>
-				<DateField source="last_seen" showTime />
-			</ReferenceField>
-
-			<DateField source="created_at" label="Joined" />
+			<DateField source="created_at" label="Joined" showTime />
+			<TextField source="id" label="ID" />
 		</Datagrid>
 	</List>
 );
@@ -346,6 +342,16 @@ export const ProfileShow = () => (
 							{/* Status Dropdown */}
 							<Box sx={{ mt: 2 }}>
 								<StatusDropdown />
+							</Box>
+
+							{/* Gender Dropdown */}
+							<Box sx={{ mt: 2 }}>
+								<GenderDropdown />
+							</Box>
+
+							{/* Delete User Button */}
+							<Box sx={{ mt: 2 }}>
+								<DeleteUserButton />
 							</Box>
 						</SimpleShowLayout>
 					</Box>

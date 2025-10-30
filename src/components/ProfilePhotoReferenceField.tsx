@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useRecordContext } from 'react-admin';
 import { supabase } from '../supabaseClient';
 
-interface ProfilePhotoFieldProps {
+interface ProfilePhotoReferenceFieldProps {
+	source: string;
 	label?: string;
 	bucket?: string;
 }
 
-export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
+export const ProfilePhotoReferenceField: React.FC<ProfilePhotoReferenceFieldProps> = ({
+	source,
 	label,
 	bucket = 'images'
 }) => {
@@ -16,9 +18,12 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
+	// Get the profile ID from the source field (e.g., blocker_id or blocked_user_id)
+	const profileId = record?.[source];
+
 	useEffect(() => {
 		const fetchProfilePhoto = async () => {
-			if (!record?.id) {
+			if (!profileId) {
 				setLoading(false);
 				return;
 			}
@@ -28,7 +33,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 				const { data: photo, error: photoError } = await supabase
 					.from('user_photos')
 					.select('storage_key, sort_order, is_primary')
-					.eq('user_id', record.id)
+					.eq('user_id', profileId)
 					.eq('sort_order', 0)  // Profile photo is sort_order = 0
 					.single();
 
@@ -37,7 +42,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 					const { data: primaryPhoto, error: primaryError } = await supabase
 						.from('user_photos')
 						.select('storage_key, sort_order, is_primary')
-						.eq('user_id', record.id)
+						.eq('user_id', profileId)
 						.eq('is_primary', true)
 						.single();
 
@@ -46,7 +51,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 						const { data: recentPhoto, error: recentError } = await supabase
 							.from('user_photos')
 							.select('storage_key, sort_order, is_primary')
-							.eq('user_id', record.id)
+							.eq('user_id', profileId)
 							.order('created_at', { ascending: false })
 							.limit(1)
 							.single();
@@ -64,7 +69,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 							.createSignedUrl(recentPhoto.storage_key, 3600);
 
 						if (signedError) {
-							console.error('ProfilePhotoField: Failed to generate signed URL:', signedError);
+							console.error('ProfilePhotoReferenceField: Failed to generate signed URL:', signedError);
 							setError('Failed to load');
 						} else {
 							setSignedUrl(signedData.signedUrl);
@@ -76,7 +81,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 							.createSignedUrl(primaryPhoto.storage_key, 3600);
 
 						if (signedError) {
-							console.error('ProfilePhotoField: Failed to generate signed URL:', signedError);
+							console.error('ProfilePhotoReferenceField: Failed to generate signed URL:', signedError);
 							setError('Failed to load');
 						} else {
 							setSignedUrl(signedData.signedUrl);
@@ -89,14 +94,14 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 						.createSignedUrl(photo.storage_key, 3600);
 
 					if (signedError) {
-						console.error('ProfilePhotoField: Failed to generate signed URL:', signedError);
+						console.error('ProfilePhotoReferenceField: Failed to generate signed URL:', signedError);
 						setError('Failed to load');
 					} else {
 						setSignedUrl(signedData.signedUrl);
 					}
 				}
 			} catch (err) {
-				console.error('ProfilePhotoField: Unexpected error loading photo:', err);
+				console.error('ProfilePhotoReferenceField: Unexpected error loading photo:', err);
 				setError('Failed to load');
 			} finally {
 				setLoading(false);
@@ -104,70 +109,53 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 		};
 
 		fetchProfilePhoto();
-	}, [record?.id, bucket]);
+	}, [profileId, bucket]);
 
 	if (loading) {
-		return <div style={{
-			width: '100%',
-			height: '100%',
-			minWidth: 60,
-			minHeight: 60,
-			maxWidth: 125,
-			maxHeight: 125,
-			backgroundColor: '#f0f0f0',
-			display: 'flex',
-			alignItems: 'center',
-			justifyContent: 'center',
-			borderRadius: '8px',
-			border: '2px solid #ddd'
-		}}>
-			...
-		</div>;
+		return (
+			<div
+				style={{
+					width: '75px',
+					height: '75px',
+					borderRadius: '50%',
+					backgroundColor: '#f0f0f0',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+				}}
+			>
+				<span style={{ fontSize: '12px', color: '#999' }}>...</span>
+			</div>
+		);
 	}
 
 	if (error || !signedUrl) {
-		// Show a nice placeholder for users without photos
-		const isNoPhoto = error === 'No photo';
-		return <div style={{
-			width: '100%',
-			height: '100%',
-			minWidth: 60,
-			minHeight: 60,
-			maxWidth: 125,
-			maxHeight: 125,
-			backgroundColor: isNoPhoto ? '#e3f2fd' : '#ffebee',
-			display: 'flex',
-			alignItems: 'center',
-			justifyContent: 'center',
-			color: isNoPhoto ? '#1976d2' : '#c62828',
-			borderRadius: '8px',
-			border: '2px solid #ddd',
-			fontSize: isNoPhoto ? '48px' : '32px',
-			fontWeight: 'bold'
-		}} title={isNoPhoto ? 'No photo uploaded' : 'Failed to load photo'}>
-			{isNoPhoto ? '👤' : '⚠️'}
-		</div>;
+		return (
+			<div
+				style={{
+					width: '75px',
+					height: '75px',
+					borderRadius: '50%',
+					backgroundColor: '#e0e0e0',
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+				}}
+			>
+				<span style={{ fontSize: '12px', color: '#666' }}>N/A</span>
+			</div>
+		);
 	}
 
 	return (
 		<img
 			src={signedUrl}
-			alt={label || "Profile Photo"}
+			alt={label || 'Profile Photo'}
 			style={{
-				width: '100%',
-				height: '100%',
-				minWidth: 60,
-				minHeight: 60,
-				maxWidth: 125,
-				maxHeight: 125,
+				width: '75px',
+				height: '75px',
+				borderRadius: '50%',
 				objectFit: 'cover',
-				borderRadius: '8px',
-				border: '2px solid #ddd'
-			}}
-			onError={(e) => {
-				// Prevent repeated error attempts
-				e.currentTarget.style.display = 'none';
-				setError('Failed to load');
 			}}
 		/>
 	);

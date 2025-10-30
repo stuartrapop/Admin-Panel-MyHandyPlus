@@ -17,7 +17,7 @@ export const ProfileReferenceField: React.FC<ProfileReferenceFieldProps> = ({
 	<ReferenceField source={source} reference="profiles" label={label}>
 		<FunctionField render={(record) => {
 			// Try different possible field names for display name
-			const name = record.display_name ||
+			const name = record.firstname ||
 				record.username ||
 				record.full_name ||
 				record.name ||
