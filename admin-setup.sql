@@ -736,6 +736,7 @@ RETURNS TABLE (
   email VARCHAR(255),
   status TEXT,  -- Changed from account_status to status for React-Admin
   gender TEXT,  -- Changed from gender_value to gender for React-Admin
+  profile_photo_url TEXT,  -- Signed URL for profile photo
   total_count BIGINT
 )
 LANGUAGE plpgsql
@@ -805,6 +806,14 @@ BEGIN
       u.email,
       COALESCE(uas.status, 'active') AS status,
       ta.value AS gender,
+      -- Generate signed URL for gallery photo 0 directly in database
+      (
+        SELECT storage.sign(
+          'users/' || p.id::text || '/gallery/0.webp',
+          3600,
+          'images'
+        )
+      ) AS gallery_photo_url,
       -- Add row number to handle duplicates
       ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY ta.value NULLS LAST) as rn
     FROM public.profiles p
@@ -844,6 +853,8 @@ BEGIN
     rp.email,
     rp.status,
     rp.gender,
+    -- Return signed URL generated in database
+    rp.gallery_photo_url AS profile_photo_url,
     total_records AS total_count
   FROM ranked_profiles rp
   WHERE rp.rn = 1  -- Only take first row per profile (eliminates duplicates)

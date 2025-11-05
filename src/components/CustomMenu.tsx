@@ -2,6 +2,7 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import BlockIcon from '@mui/icons-material/Block';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EmailIcon from '@mui/icons-material/Email';
 import MapIcon from '@mui/icons-material/Map';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import PeopleIcon from '@mui/icons-material/People';
@@ -13,6 +14,7 @@ export const CustomMenu = () => (
 	<Menu>
 		<Menu.DashboardItem leftIcon={<DashboardIcon />} />
 		<Menu.Item to="/user-map" primaryText="User Map" leftIcon={<MapIcon />} />
+		<Menu.Item to="/email-preview" primaryText="Email Templates" leftIcon={<EmailIcon />} />
 		<Menu.ResourceItem name="profiles" leftIcon={<PeopleIcon />} />
 
 		<Menu.ResourceItem name="user_blocks" leftIcon={<BlockIcon />} />

@@ -25,7 +25,7 @@ import { EmailField } from "../components/EmailField";
 import { GalleryPhotos } from "../components/GalleryPhotos";
 import { GenderDropdown } from "../components/GenderDropdown";
 import { GenderField } from "../components/GenderField";
-import { ProfilePhotoField } from "../components/ProfilePhotoField";
+import { ProfilePhotoField } from "../components/ProfilePhotoFieldOptimized";
 import { StatusDropdown } from "../components/StatusDropdown";
 
 const profileFilters = [

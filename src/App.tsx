@@ -5,6 +5,7 @@ import { dataProvider } from "./dataProvider";
 import { Layout } from "./Layout";
 import { CustomLoginPage } from "./LoginPage";
 import { Dashboard } from "./pages/Dashboard";
+import { EmailPreview } from "./pages/EmailPreview";
 import { ProblemsList } from "./pages/problems";
 import { ProfileShow, ProfilesList } from "./pages/profiles";
 import { StaffRolesList } from "./pages/staffRoles";
@@ -31,6 +32,7 @@ export const App = () => (
     {/* Custom Routes */}
     <CustomRoutes>
       <Route path="/user-map" element={<UserMapPage />} />
+      <Route path="/email-preview" element={<EmailPreview />} />
     </CustomRoutes>
   </Admin>
 );
