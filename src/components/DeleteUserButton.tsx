@@ -81,23 +81,10 @@ export const DeleteUserButton = () => {
 		setOpenDialog(false);
 
 		try {
-			// Step 1: Fetch the user's email from auth.users using RPC function
-			let userEmail = null;
-			try {
-				const { data: emailData, error: emailError } = await supabase.rpc('get_user_email', {
-					requested_user_id: record.id
-				});
+			// Use email from record (already loaded from RPC function)
+			const userEmail = record.email || null;
 
-				if (!emailError && emailData) {
-					userEmail = emailData;
-				} else {
-					console.error('Error fetching email:', emailError);
-				}
-			} catch (err) {
-				console.error('Exception fetching email:', err);
-			}
-
-			// Step 2: Insert record into users_deleted table BEFORE deleting the user
+			// Step 1: Insert record into users_deleted table BEFORE deleting the user
 			const deletionRecord = {
 				user_id: record.id,
 				email: userEmail || null,
@@ -108,11 +95,6 @@ export const DeleteUserButton = () => {
 			};
 
 			console.log('Inserting into users_deleted:', deletionRecord);
-			console.log('Record data:', {
-				id: record.id,
-				firstname: record.firstname,
-				email: userEmail
-			});
 
 			const { error: insertError } = await supabase
 				.from('users_deleted')
@@ -127,7 +109,7 @@ export const DeleteUserButton = () => {
 
 			console.log('Successfully inserted into users_deleted');
 
-			// Step 3: Get the current session to get the auth token
+			// Step 2: Get the current session to get the auth token
 			const { data: { session } } = await supabase.auth.getSession();
 
 			if (!session) {

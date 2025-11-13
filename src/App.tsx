@@ -23,16 +23,16 @@ export const App = () => (
     requireAuth
   >
     {/* Resources in sidebar menu order */}
-    <Resource name="profiles" list={ProfilesList} show={ProfileShow} />
+    < Resource name="profiles" list={ProfilesList} show={ProfileShow} />
     <Resource name="user_blocks" list={UserBlocks} />
     <Resource name="staff_roles" list={StaffRolesList} />
     <Resource name="users_deleted" list={UsersDeletedList} recordRepresentation="user_id" />
-    <Resource name="problems" list={ProblemsList} />
+    <Resource name="problems" list={ProblemsList} />;
 
     {/* Custom Routes */}
     <CustomRoutes>
       <Route path="/user-map" element={<UserMapPage />} />
       <Route path="/email-preview" element={<EmailPreview />} />
     </CustomRoutes>
-  </Admin>
+  </Admin >
 );

@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 interface ProfilePhotoFieldProps {
 	label?: string;
 	bucket?: string;
+	size?: 'small' | 'medium' | 'large'; // small for lists, medium/large for detail pages
 }
 
 // Cache for signed URLs to avoid regenerating them
@@ -12,7 +13,8 @@ const urlCache = new Map<string, { url: string; expires: number; }>();
 
 export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 	label,
-	bucket = 'images'
+	bucket = 'images',
+	size = 'small' // default to small for list views
 }) => {
 	const record = useRecordContext();
 	const [signedUrl, setSignedUrl] = useState<string | null>(null);
@@ -20,6 +22,9 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 	const [error, setError] = useState<string | null>(null);
 	const [isVisible, setIsVisible] = useState(false);
 	const imgRef = useRef<HTMLDivElement>(null);
+
+	// Get dimensions based on size prop
+	const dimensions = size === 'small' ? 50 : size === 'medium' ? 150 : 300;
 
 	// Intersection Observer for lazy loading
 	useEffect(() => {
@@ -90,7 +95,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 					return;
 				}
 
-				// Generate signed URL
+				// Generate signed URL without transformations to avoid Supabase limits
 				const { data: signedData, error: signedError } = await supabase.storage
 					.from(bucket)
 					.createSignedUrl(photo.storage_key, 3600);
@@ -115,7 +120,7 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 		};
 
 		fetchProfilePhoto();
-	}, [isVisible, record, bucket]);
+	}, [isVisible, record, bucket, size]);
 
 	// Placeholder while not visible or loading
 	if (!isVisible || loading) {
@@ -123,8 +128,8 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 			<div
 				ref={imgRef}
 				style={{
-					width: '50px',
-					height: '50px',
+					width: `${dimensions}px`,
+					height: `${dimensions}px`,
 					borderRadius: '50%',
 					backgroundColor: '#f0f0f0',
 					display: 'flex',
@@ -143,8 +148,8 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 		return (
 			<div
 				style={{
-					width: '50px',
-					height: '50px',
+					width: `${dimensions}px`,
+					height: `${dimensions}px`,
 					borderRadius: '50%',
 					backgroundColor: '#e0e0e0',
 					display: 'flex',
@@ -162,8 +167,8 @@ export const ProfilePhotoField: React.FC<ProfilePhotoFieldProps> = ({
 			src={signedUrl}
 			alt={label || 'Profile Photo'}
 			style={{
-				width: '50px',
-				height: '50px',
+				width: `${dimensions}px`,
+				height: `${dimensions}px`,
 				borderRadius: '50%',
 				objectFit: 'cover',
 			}}

@@ -734,8 +734,8 @@ RETURNS TABLE (
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
   email VARCHAR(255),
-  status TEXT,  -- Changed from account_status to status for React-Admin
-  gender TEXT,  -- Changed from gender_value to gender for React-Admin
+  account_status TEXT,  -- React-Admin expects account_status
+  gender_value TEXT,    -- React-Admin expects gender_value
   profile_photo_url TEXT,  -- Signed URL for profile photo
   total_count BIGINT
 )
@@ -804,16 +804,10 @@ BEGIN
       p.created_at,
       p.updated_at,
       u.email,
-      COALESCE(uas.status, 'active') AS status,
-      ta.value AS gender,
-      -- Generate signed URL for gallery photo 0 directly in database
-      (
-        SELECT storage.sign(
-          'users/' || p.id::text || '/gallery/0.webp',
-          3600,
-          'images'
-        )
-      ) AS gallery_photo_url,
+      COALESCE(uas.status, 'active') AS account_status,
+      COALESCE(ta.value, 'unknown') AS gender_value,
+      -- Profile photo URL - left as NULL, will be fetched by component fallback
+      NULL AS gallery_photo_url,
       -- Add row number to handle duplicates
       ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY ta.value NULLS LAST) as rn
     FROM public.profiles p
@@ -851,8 +845,8 @@ BEGIN
     rp.created_at,
     rp.updated_at,
     rp.email,
-    rp.status,
-    rp.gender,
+    rp.account_status,
+    rp.gender_value,
     -- Return signed URL generated in database
     rp.gallery_photo_url AS profile_photo_url,
     total_records AS total_count
@@ -863,7 +857,8 @@ BEGIN
       WHEN sort_field = 'firstname' AND sort_order = 'ASC' THEN rp.firstname
       WHEN sort_field = 'name' AND sort_order = 'ASC' THEN rp.name
       WHEN sort_field = 'email' AND sort_order = 'ASC' THEN rp.email
-      WHEN sort_field = 'status' AND sort_order = 'ASC' THEN rp.status
+      WHEN sort_field = 'account_status' AND sort_order = 'ASC' THEN rp.account_status
+      WHEN sort_field = 'status' AND sort_order = 'ASC' THEN rp.account_status  -- Support both field names
       WHEN sort_field = 'created_at' AND sort_order = 'ASC' THEN rp.created_at::TEXT
       ELSE NULL
     END ASC NULLS LAST,
@@ -871,7 +866,8 @@ BEGIN
       WHEN sort_field = 'firstname' AND sort_order = 'DESC' THEN rp.firstname
       WHEN sort_field = 'name' AND sort_order = 'DESC' THEN rp.name
       WHEN sort_field = 'email' AND sort_order = 'DESC' THEN rp.email
-      WHEN sort_field = 'status' AND sort_order = 'DESC' THEN rp.status
+      WHEN sort_field = 'account_status' AND sort_order = 'DESC' THEN rp.account_status
+      WHEN sort_field = 'status' AND sort_order = 'DESC' THEN rp.account_status  -- Support both field names
       WHEN sort_field = 'created_at' AND sort_order = 'DESC' THEN rp.created_at::TEXT
       ELSE rp.created_at::TEXT
     END DESC NULLS LAST
@@ -882,7 +878,7 @@ $$;
 
 -- Add helpful comment
 COMMENT ON FUNCTION search_profiles IS
-'Comprehensive profile search function supporting firstname, name, email, gender, and status filters with pagination. Returns status and gender columns for React-Admin. Admin/Moderator only.';
+'Comprehensive profile search function supporting firstname, name, email, gender, and status filters with pagination. Returns account_status and gender_value columns for React-Admin compatibility. Admin/Moderator only.';
 
 
 -- =============================================================================

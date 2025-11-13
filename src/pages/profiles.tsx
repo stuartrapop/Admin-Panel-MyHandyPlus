@@ -87,19 +87,19 @@ export const ProfilesList = () => (
 	>
 		<Datagrid rowClick="show">
 
-			<ProfilePhotoField label="Photo" />
+			<ProfilePhotoField label="Photo" size="small" />
 			<TextField source="firstname" label="First Name" />
 			<TextField source="name" label="Full Name" />
-			<TextField source="gender" label="Gender" />
+			<TextField source="gender_value" label="Gender" />
 			<EmailField label="Email" />
 
-			{/* Account Status - comes directly from RPC function as 'status' */}
+			{/* Account Status - comes directly from RPC function as 'account_status' */}
 			<FunctionField
 				label="Status"
-				source="status"
+				source="account_status"
 				sortable={true}
-				render={(record: { status?: string; }) => {
-					if (!record?.status || record.status === 'unknown') {
+				render={(record: { account_status?: string; }) => {
+					if (!record?.account_status || record.account_status === 'unknown') {
 						return <Chip label="Unknown" size="small" color="default" />;
 					}
 
@@ -115,9 +115,9 @@ export const ProfilesList = () => (
 
 					return (
 						<Chip
-							label={record.status.charAt(0).toUpperCase() + record.status.slice(1).replace('_', ' ')}
+							label={record.account_status.charAt(0).toUpperCase() + record.account_status.slice(1).replace('_', ' ')}
 							size="small"
-							color={statusColors[record.status] || "default"}
+							color={statusColors[record.account_status] || "default"}
 						/>
 					);
 				}}
@@ -298,7 +298,7 @@ export const ProfileShow = () => (
 				<Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 3 }}>
 					<Box sx={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 						<Box sx={{ width: 300, height: 300, mb: 2 }}>
-							<ProfilePhotoField label="" />
+							<ProfilePhotoField label="" size="large" />
 						</Box>
 						<Typography variant="h6" gutterBottom>Profile Photo</Typography>
 					</Box>
