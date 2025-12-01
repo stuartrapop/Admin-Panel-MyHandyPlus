@@ -86,6 +86,8 @@ export const StatusDropdown = () => {
 		tester: '#0288d1',
 		incomplete: '#ed6c02',
 		under_review: '#0288d1',
+		under_review_active: '#2e7d32',
+		under_review_banned: '#d32f2f',
 	};
 
 	return (
@@ -109,7 +111,8 @@ export const StatusDropdown = () => {
 					<MenuItem value="inactive">Inactive</MenuItem>
 					<MenuItem value="tester">Tester</MenuItem>
 					<MenuItem value="incomplete">Incomplete</MenuItem>
-					<MenuItem value="under_review">Under Review</MenuItem>
+					<MenuItem value="under_review_active">Under Review (Active)</MenuItem>
+					<MenuItem value="under_review_banned">Under Review (Banned)</MenuItem>
 				</Select>
 			</FormControl>
 			{loading && <CircularProgress size={20} />}

@@ -108,9 +108,9 @@ export const Dashboard = () => {
 			try {
 				setLoading(true);
 
-				// Fetch overall stats from cached materialized view
+				// Fetch overall stats from regular view (no caching dependency)
 				const { data: overviewData, error: overviewError } = await supabase
-					.from('admin_dashboard_overview_cached')
+					.from('admin_dashboard_overview')
 					.select('*')
 					.single();
 

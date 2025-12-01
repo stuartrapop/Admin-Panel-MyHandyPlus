@@ -131,48 +131,69 @@ export const dataProvider = {
     return baseDataProvider.getList(resource, params)
   },
 
-  // Override getOne for profiles to use RPC function
+  // Override getOne for profiles to use batch searching to find any profile
   getOne: async (resource: string, params: { id: string }) => {
     if (resource === "profiles") {
       try {
-        console.log("🔍 Calling search_profiles RPC for single profile:", params.id)
+        console.log("🔍 Searching for profile across all records:", params.id)
 
-        // Use search_profiles RPC to get single profile with email, gender, and status
-        const { data, error } = await supabase.rpc("search_profiles", {
-          search_firstname: null,
-          search_name: null,
-          search_email: null,
-          filter_gender: null,
-          filter_status: null,
-          sort_field: "created_at",
-          sort_order: "DESC",
-          page_limit: 1000, // Get more records to find the specific one
-          page_offset: 0
-        })
+        // Search through all records in batches until we find the profile
+        let foundProfile = null
+        let currentOffset = 0
+        const batchSize = 1000
 
-        if (error) {
-          console.error("❌ RPC Error in getOne:", error)
-          throw error
+        while (!foundProfile) {
+          const { data: rpcData, error: rpcError } = await supabase.rpc("search_profiles", {
+            search_firstname: null,
+            search_name: null,
+            search_email: null,
+            filter_gender: null,
+            filter_status: null,
+            sort_field: "created_at",
+            sort_order: "DESC",
+            page_limit: batchSize,
+            page_offset: currentOffset
+          })
+
+          if (rpcError) {
+            console.error("❌ RPC Error in getOne:", rpcError)
+            throw rpcError
+          }
+
+          if (!rpcData || rpcData.length === 0) {
+            // No more records to search
+            console.log("🔍 No more records found, profile not found")
+            break
+          }
+
+          // Find the profile in this batch
+          foundProfile = rpcData.find((p: SearchProfilesResult) => p.id === params.id)
+
+          if (foundProfile) {
+            console.log(`✅ Profile found in batch starting at offset ${currentOffset}`)
+            break
+          }
+
+          // Move to next batch
+          currentOffset += batchSize
+          console.log(`🔍 Profile not found in batch ${currentOffset - batchSize}-${currentOffset}, searching next batch...`)
         }
 
-        // Find the specific profile by ID
-        const profile = data?.find((p: SearchProfilesResult) => p.id === params.id)
-
-        if (!profile) {
-          throw new Error(`Profile ${params.id} not found`)
+        if (!foundProfile) {
+          throw new Error(`Profile ${params.id} not found in any batch`)
         }
 
         // Remove total_count from the profile
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { total_count, ...cleanProfile } = profile
+        const { total_count, ...cleanProfile } = foundProfile
 
-        console.log("✅ Profile loaded via RPC:", cleanProfile)
+        console.log("✅ Profile loaded successfully:", { id: cleanProfile.id, email: cleanProfile.email })
 
         return {
           data: cleanProfile
         }
       } catch (error) {
-        console.error("❌ RPC failed in getOne, using fallback:", error)
+        console.error("❌ Profile search failed, using base fallback:", error)
 
         // Fallback to base provider
         const result = await baseDataProvider.getOne(resource, params)

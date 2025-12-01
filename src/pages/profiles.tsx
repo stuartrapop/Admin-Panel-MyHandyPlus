@@ -61,7 +61,8 @@ const profileFilters = [
 			{ id: 'inactive', name: 'Inactive' },
 			{ id: 'tester', name: 'Tester' },
 			{ id: 'incomplete', name: 'Incomplete' },
-			{ id: 'under_review', name: 'Under Review' },
+			{ id: 'under_review_active', name: 'Under Review (Active)' },
+			{ id: 'under_review_banned', name: 'Under Review (Banned)' },
 		]}
 		alwaysOn
 	/>,
@@ -303,12 +304,38 @@ export const ProfileShow = () => (
 						<Typography variant="h6" gutterBottom>Profile Photo</Typography>
 					</Box>
 					<Box sx={{ flex: 1 }}>
-						<SimpleShowLayout>
-							<TextField source="id" label="User ID" />
-							<TextField source="firstname" label="First Name" />
-							<TextField source="name" label="Full Name" />
-							<EmailField label="Email" />
+						{/* Name and Action Controls Section */}
+						<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 3 }}>
+							{/* Left side - Name fields */}
+							<Box sx={{ flex: 1, minWidth: 0 }}>
+								<Box sx={{ mb: 2 }}>
+									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>User ID</Typography>
+									<TextField source="id" label="" sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }} />
+								</Box>
+								<Box sx={{ mb: 2 }}>
+									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>First Name</Typography>
+									<TextField source="firstname" label="" sx={{ '& .MuiInputBase-input': { fontSize: '1.1rem', fontWeight: 500 } }} />
+								</Box>
+								<Box sx={{ mb: 2 }}>
+									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Full Name</Typography>
+									<TextField source="name" label="" sx={{ '& .MuiInputBase-input': { fontSize: '1.1rem', fontWeight: 500 } }} />
+								</Box>
+								<Box sx={{ mb: 2 }}>
+									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Email</Typography>
+									<EmailField label="" />
+								</Box>
+							</Box>
 
+							{/* Right side - Action controls */}
+							<Box sx={{ flex: '0 0 300px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+								<StatusDropdown />
+								<GenderDropdown />
+								<DeleteUserButton />
+							</Box>
+						</Box>
+
+						{/* Rest of the profile information */}
+						<SimpleShowLayout>
 							{/* Gender - get from profile_attributes */}
 							<FunctionField
 								label="Gender"
@@ -338,21 +365,6 @@ export const ProfileShow = () => (
 							<BooleanField source="location_verified" label="Location Verified" />
 							<DateField source="created_at" label="Account Created" showTime />
 							<DateField source="updated_at" label="Last Updated" showTime />
-
-							{/* Status Dropdown */}
-							<Box sx={{ mt: 2 }}>
-								<StatusDropdown />
-							</Box>
-
-							{/* Gender Dropdown */}
-							<Box sx={{ mt: 2 }}>
-								<GenderDropdown />
-							</Box>
-
-							{/* Delete User Button */}
-							<Box sx={{ mt: 2 }}>
-								<DeleteUserButton />
-							</Box>
 						</SimpleShowLayout>
 					</Box>
 				</Box>
