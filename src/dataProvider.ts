@@ -1,5 +1,5 @@
 import { supabaseDataProvider } from "ra-supabase";
-import { GetListParams } from "react-admin";
+import { GetListParams, GetManyReferenceParams } from "react-admin";
 import { supabase } from "./supabaseClient";
 
 // Type for RPC function response
@@ -29,11 +29,47 @@ const baseDataProvider = supabaseDataProvider({
   supabaseClient: supabase
 })
 
+// Create a logging wrapper for base data provider
+const loggingBaseDataProvider = new Proxy(baseDataProvider, {
+  get(target, prop) {
+    const original = target[prop as keyof typeof target];
+    if (typeof original === 'function') {
+      return async (...args: unknown[]) => {
+        console.log(`📞 baseDataProvider.${String(prop)} called with:`, args[0], args[1] ? args[1] : '');
+        try {
+          const result = await (original as (...args: unknown[]) => Promise<unknown>).apply(target, args);
+          console.log(`✅ baseDataProvider.${String(prop)} returned:`, result);
+          return result;
+        } catch (error) {
+          console.error(`❌ baseDataProvider.${String(prop)} error:`, error);
+          throw error;
+        }
+      };
+    }
+    return original;
+  }
+});
+
 export const dataProvider = {
-  ...baseDataProvider,
+  ...loggingBaseDataProvider,
 
   // Override getList for profiles to use RPC function
   getList: async (resource: string, params: GetListParams) => {
+    // Handle profile_attributes with composite key
+    if (resource === "profile_attributes") {
+      console.log("🔥 getList called for profile_attributes", params);
+      const result = await loggingBaseDataProvider.getList(resource, params);
+      // Add synthetic id field from composite key
+      if (result.data) {
+        result.data = result.data.map((record: Record<string, unknown>) => ({
+          ...record,
+          id: `${record.profile_id}-${record.attribute_id}` // Composite key as id
+        }));
+      }
+      console.log("✅ getList result for profile_attributes:", result.data.length, "records");
+      return result;
+    }
+
     if (resource === "profiles") {
       const page = params.pagination?.page || 1
       const perPage = params.pagination?.perPage || 10
@@ -110,7 +146,7 @@ export const dataProvider = {
             : params.sort
         }
 
-        const result = await baseDataProvider.getList(resource, fallbackParams)
+        const result = await loggingBaseDataProvider.getList(resource, fallbackParams)
 
         // Add missing fields for React-Admin compatibility
         const enrichedData = result.data.map((record) => ({
@@ -128,7 +164,7 @@ export const dataProvider = {
       }
     }
 
-    return baseDataProvider.getList(resource, params)
+    return loggingBaseDataProvider.getList(resource, params)
   },
 
   // Override getOne for profiles to use batch searching to find any profile
@@ -196,7 +232,7 @@ export const dataProvider = {
         console.error("❌ Profile search failed, using base fallback:", error)
 
         // Fallback to base provider
-        const result = await baseDataProvider.getOne(resource, params)
+        const result = await loggingBaseDataProvider.getOne(resource, params)
 
         // Add missing fields
         return {
@@ -211,6 +247,109 @@ export const dataProvider = {
       }
     }
 
-    return baseDataProvider.getOne(resource, params)
+    return loggingBaseDataProvider.getOne(resource, params)
+  },
+
+  // Override getMany for profile_attributes to add synthetic id
+  getMany: async (resource: string, params: { ids: string[] }) => {
+    if (resource === "profile_attributes") {
+      console.log("🔥 getMany called for profile_attributes", params);
+      // Parse composite IDs back to profile_id and attribute_id pairs
+      const idPairs = params.ids.map(id => {
+        const [profile_id, attribute_id] = id.split('-');
+        return { profile_id, attribute_id };
+      });
+
+      console.log("🔍 Parsed ID pairs:", idPairs);
+
+      // Fetch each record manually
+      const promises = idPairs.map(({ profile_id, attribute_id }) =>
+        supabase
+          .from('profile_attributes')
+          .select('profile_id, attribute_id, created_at')
+          .eq('profile_id', profile_id)
+          .eq('attribute_id', attribute_id)
+          .single()
+      );
+
+      const results = await Promise.all(promises);
+
+      // Filter out errors and add synthetic id
+      const data = results
+        .filter(({ data, error }) => !error && data)
+        .map(({ data }) => data ? ({
+          ...data,
+          id: `${data.profile_id}-${data.attribute_id}`
+        }) : null)
+        .filter(Boolean);
+
+      console.log("✅ getMany result for profile_attributes:", data.length, "records");
+      return { data };
+    }
+    return loggingBaseDataProvider.getMany(resource, params);
+  },
+
+  // Override getManyReference for profile_attributes to add synthetic id
+  getManyReference: async (resource: string, params: GetManyReferenceParams) => {
+    if (resource === "profile_attributes") {
+      console.log("🔥 getManyReference called for profile_attributes", params);
+      // Manually fetch profile_attributes without requiring 'id' column
+      const { target, id, pagination, sort, filter } = params;
+      const { page, perPage } = pagination;
+      const { field, order } = sort;
+
+      console.log(`🔍 Query params: target=${target}, id=${id}, field=${field}, order=${order}`);
+
+      const query = supabase
+        .from('profile_attributes')
+        .select('profile_id, attribute_id, created_at', { count: 'exact' })
+        .eq(target, id);
+
+      // Apply filters
+      if (filter) {
+        console.log("🔍 Applying filters:", filter);
+        Object.entries(filter).forEach(([key, value]) => {
+          query.eq(key, value);
+        });
+      }
+
+      // Map synthetic 'id' field to actual column for sorting
+      // Since 'id' doesn't exist in the table, default to 'created_at'
+      const sortField = field === 'id' ? 'created_at' : field;
+      console.log(`🔍 Mapped sort field: ${field} -> ${sortField}`);
+
+      // Apply sorting
+      query.order(sortField, { ascending: order === 'ASC' });
+
+      // Apply pagination
+      const start = (page - 1) * perPage;
+      const end = start + perPage - 1;
+      query.range(start, end);
+
+      console.log("🔍 Executing Supabase query...");
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error("❌ getManyReference error:", error);
+        throw error;
+      }
+
+      console.log("✅ Query successful, raw data:", data?.length, "records");
+
+      // Add synthetic id field from composite key
+      const dataWithId = (data || []).map((record) => ({
+        ...record,
+        id: `${record.profile_id}-${record.attribute_id}`
+      }));
+
+      console.log("✅ getManyReference result for profile_attributes:", dataWithId.length, "records, total:", count);
+
+      return {
+        data: dataWithId,
+        total: count || 0
+      };
+    }
+    console.log("🔥 getManyReference called for resource:", resource);
+    return loggingBaseDataProvider.getManyReference(resource, params);
   }
 }

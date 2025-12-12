@@ -382,7 +382,11 @@ export const ProfileShow = () => (
 					label="User Attributes"
 				>
 					<SingleFieldList linkType={false}>
-						<ReferenceField source="attribute_id" reference="types_attributes" link={false}>
+						<ReferenceField
+							source="attribute_id"
+							reference="types_attributes"
+							link={false}
+						>
 							<FunctionField
 								render={(record: { value?: string; category?: string; }) => {
 									if (!record) return null;
