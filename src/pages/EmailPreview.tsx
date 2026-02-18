@@ -52,7 +52,7 @@ export const EmailPreview = () => {
 
 	return (
 		<Box p={3}>
-			<Title title="Email Templates Preview" />
+			<Title title="Email Template Preview" />
 			<Typography variant="h4" gutterBottom>
 				Email Templates
 			</Typography>

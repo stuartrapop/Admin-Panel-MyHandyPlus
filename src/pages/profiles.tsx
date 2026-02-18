@@ -367,7 +367,10 @@ export const ProfileShow = () => (
 							<TextField source="declared_city" label="City" />
 							<BooleanField source="location_verified" label="Location Verified" />
 							<DateField source="created_at" label="Account Created" showTime />
-							<DateField source="updated_at" label="Last Updated" showTime />
+							<DateField source="last_activity" label="Last Activity" showTime />
+							<ReferenceField source="id" reference="user_presence" label="Platform" link={false}>
+								<TextField source="platform" />
+							</ReferenceField>
 						</SimpleShowLayout>
 					</Box>
 				</Box>
