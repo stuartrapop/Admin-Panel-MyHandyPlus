@@ -56,6 +56,37 @@ export const dataProvider = {
   // Override getList for profiles to use RPC function
   getList: async (resource: string, params: GetListParams) => {
     // Handle profile_attributes with composite key
+    if (resource === 'chat_rooms') {
+      const { page, perPage } = params.pagination || { page: 1, perPage: 100 };
+      const { field, order } = params.sort || { field: 'last_message_at', order: 'DESC' };
+      const filters = params.filter || {};
+
+      const start = (page - 1) * perPage;
+      const end = start + perPage - 1;
+
+      let query = supabase
+        .from('chat_rooms')
+        .select('*', { count: 'exact' });
+
+      if (filters.user_id) {
+        query = query.or(`user1_id.eq.${filters.user_id},user2_id.eq.${filters.user_id}`);
+      }
+
+      query = query
+        .order(field, { ascending: order === 'ASC' })
+        .range(start, end);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        console.error('❌ chat_rooms getList error:', error);
+        throw error;
+      }
+
+      console.log('✅ chat_rooms getList:', data?.length, 'records');
+      return { data: data || [], total: count || 0 };
+    }
+
     if (resource === "profile_attributes") {
       console.log("🔥 getList called for profile_attributes", params);
       const result = await loggingBaseDataProvider.getList(resource, params);

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git log:*)",
       "Bash(git fetch:*)",
-      "WebFetch(domain:www.githubstatus.com)"
+      "WebFetch(domain:www.githubstatus.com)",
+      "Bash(npm run type-check:*)"
     ]
   }
 }

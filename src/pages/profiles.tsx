@@ -147,33 +147,58 @@ interface MessageRecord {
 	read_at: string | null;
 }
 
+// Fetches and displays the last message preview for a single chat room
+const LastMessagePreview = ({ roomId }: { roomId: number }) => {
+	const { data: messages } = useGetList('messages', {
+		filter: { room_id: roomId },
+		pagination: { page: 1, perPage: 1 },
+		sort: { field: 'sent_at', order: 'DESC' },
+	});
+	const msg = messages?.[0] as MessageRecord | undefined;
+
+	if (!msg) {
+		return (
+			<Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+				No messages yet
+			</Typography>
+		);
+	}
+
+	return (
+		<>
+			<Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 80 }}>
+				<ReferenceField record={msg} source="sender_id" reference="profiles" link={false}>
+					<TextField source="firstname" />
+				</ReferenceField>
+			</Typography>
+			<Typography
+				variant="body2"
+				sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'text.secondary' }}
+			>
+				{msg.content}
+			</Typography>
+			<Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 150 }}>
+				{new Date(msg.sent_at).toLocaleString()}
+			</Typography>
+		</>
+	);
+};
+
 const UserChatRooms = () => {
 	const record = useRecordContext();
 	const userId = record?.id;
 	const [expandedRoomId, setExpandedRoomId] = React.useState<number | null>(null);
 
 	const { data: chatRooms, isLoading } = useGetList('chat_rooms', {
-		filter: {},
-		pagination: { page: 1, perPage: 100 },
+		filter: { user_id: userId },
+		pagination: { page: 1, perPage: 200 },
 		sort: { field: 'last_message_at', order: 'DESC' },
-	});
+	}, { enabled: !!userId });
 
-	// Get last message for each room
-	const { data: allMessages } = useGetList('messages', {
-		filter: {},
-		pagination: { page: 1, perPage: 1000 },
-		sort: { field: 'sent_at', order: 'DESC' },
-	});
-
-	if (isLoading) return <Typography>Loading chat rooms...</Typography>;
 	if (!userId) return null;
+	if (isLoading) return <Typography>Loading chat rooms...</Typography>;
 
-	// Filter rooms where this user is either user1 or user2
-	const userRooms = chatRooms?.filter(
-		(room: ChatRoomRecord) => room.user1_id === userId || room.user2_id === userId
-	) || [];
-
-	if (userRooms.length === 0) {
+	if (!chatRooms || chatRooms.length === 0) {
 		return <Typography>No chat rooms found</Typography>;
 	}
 
@@ -181,16 +206,10 @@ const UserChatRooms = () => {
 		setExpandedRoomId(expandedRoomId === roomId ? null : roomId);
 	};
 
-	// Get last message for a room
-	const getLastMessage = (roomId: number) => {
-		return allMessages?.find((msg: MessageRecord) => msg.room_id === roomId);
-	};
-
 	return (
 		<Box>
-			{userRooms.map((room: ChatRoomRecord) => {
+			{chatRooms.map((room: ChatRoomRecord) => {
 				const isExpanded = expandedRoomId === room.id;
-				const lastMessage = getLastMessage(room.id);
 
 				return (
 					<Card
@@ -224,43 +243,7 @@ const UserChatRooms = () => {
 									</ReferenceField>
 								</Box>
 
-								{lastMessage && (
-									<>
-										<Typography variant="body2" sx={{ color: 'text.secondary', minWidth: 80 }}>
-											<ReferenceField
-												record={lastMessage}
-												source="sender_id"
-												reference="profiles"
-												link={false}
-											>
-												<TextField source="firstname" />
-											</ReferenceField>
-										</Typography>
-
-										<Typography
-											variant="body2"
-											sx={{
-												flex: 1,
-												overflow: 'hidden',
-												textOverflow: 'ellipsis',
-												whiteSpace: 'nowrap',
-												color: 'text.secondary'
-											}}
-										>
-											{lastMessage.content}
-										</Typography>
-
-										<Typography variant="caption" sx={{ color: 'text.secondary', minWidth: 150 }}>
-											{new Date(lastMessage.sent_at).toLocaleString()}
-										</Typography>
-									</>
-								)}
-
-								{!lastMessage && (
-									<Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-										No messages yet
-									</Typography>
-								)}
+								<LastMessagePreview roomId={room.id} />
 							</Box>
 
 							{/* Expanded detailed view */}
@@ -274,7 +257,7 @@ const UserChatRooms = () => {
 										reference="messages"
 										target="room_id"
 										sort={{ field: 'sent_at', order: 'DESC' }}
-										perPage={10}
+										perPage={100}
 									>
 										<Datagrid bulkActionButtons={false} sx={{ '& .RaDatagrid-rowCell': { py: 0.5 } }}>
 											<ReferenceField source="sender_id" reference="profiles" link={false}>
