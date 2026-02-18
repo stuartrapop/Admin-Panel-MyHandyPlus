@@ -123,6 +123,7 @@ export const ProfilesList = () => (
 					);
 				}}
 			/>
+			<DateField source="last_activity" label="Last Activity" showTime sortable={true} />
 			<DateField source="created_at" label="Joined" showTime />
 			<TextField source="id" label="ID" />
 		</Datagrid>
@@ -209,17 +210,19 @@ const UserChatRooms = () => {
 									Chat Room #{room.id}
 								</Typography>
 
-								<ReferenceField
-									record={room}
-									source={room.user1_id === userId ? 'user2_id' : 'user1_id'}
-									reference="profiles"
-									link={false}
-								>
-									<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-										<ProfilePhotoField label="" />
-										<TextField source="firstname" sx={{ fontWeight: 500 }} />
-									</Box>
-								</ReferenceField>
+								<Box onClick={(e) => e.stopPropagation()}>
+									<ReferenceField
+										record={room}
+										source={room.user1_id === userId ? 'user2_id' : 'user1_id'}
+										reference="profiles"
+										link="show"
+									>
+										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+											<ProfilePhotoField label="" />
+											<TextField source="firstname" sx={{ fontWeight: 500 }} />
+										</Box>
+									</ReferenceField>
+								</Box>
 
 								{lastMessage && (
 									<>
