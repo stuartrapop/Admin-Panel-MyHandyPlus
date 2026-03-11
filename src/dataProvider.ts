@@ -50,6 +50,35 @@ const loggingBaseDataProvider = new Proxy(baseDataProvider, {
   }
 });
 
+async function fetchProfileById(id: string): Promise<SearchProfilesResult | null> {
+  let currentOffset = 0
+  const batchSize = 1000
+
+  while (true) {
+    const { data: rpcData, error } = await supabase.rpc("search_profiles", {
+      search_firstname: null,
+      search_name: null,
+      search_email: null,
+      filter_gender: null,
+      filter_status: null,
+      sort_field: "created_at",
+      sort_order: "DESC",
+      page_limit: batchSize,
+      page_offset: currentOffset
+    })
+
+    if (error) throw error
+    if (!rpcData || rpcData.length === 0) break
+
+    const found = rpcData.find((p: SearchProfilesResult) => p.id === id)
+    if (found) return found
+
+    currentOffset += batchSize
+  }
+
+  return null
+}
+
 export const dataProvider = {
   ...loggingBaseDataProvider,
 
@@ -110,6 +139,15 @@ export const dataProvider = {
 
       // Calculate offset for pagination
       const offset = (page - 1) * perPage
+
+      // UUID exact-match search: use the same RPC to get fully enriched data
+      if (filters.uuid) {
+        console.log("🔍 UUID filter detected, searching by ID:", filters.uuid)
+        const profile = await fetchProfileById(filters.uuid)
+        if (!profile) return { data: [], total: 0 }
+        const { total_count, ...cleanProfile } = profile
+        return { data: [cleanProfile], total: 1 }
+      }
 
       try {
         console.log("🔍 Calling search_profiles RPC...")
@@ -202,55 +240,14 @@ export const dataProvider = {
   getOne: async (resource: string, params: { id: string }) => {
     if (resource === "profiles") {
       try {
-        console.log("🔍 Searching for profile across all records:", params.id)
+        console.log("🔍 Searching for profile:", params.id)
 
-        // Search through all records in batches until we find the profile
-        let foundProfile = null
-        let currentOffset = 0
-        const batchSize = 1000
-
-        while (!foundProfile) {
-          const { data: rpcData, error: rpcError } = await supabase.rpc("search_profiles", {
-            search_firstname: null,
-            search_name: null,
-            search_email: null,
-            filter_gender: null,
-            filter_status: null,
-            sort_field: "created_at",
-            sort_order: "DESC",
-            page_limit: batchSize,
-            page_offset: currentOffset
-          })
-
-          if (rpcError) {
-            console.error("❌ RPC Error in getOne:", rpcError)
-            throw rpcError
-          }
-
-          if (!rpcData || rpcData.length === 0) {
-            // No more records to search
-            console.log("🔍 No more records found, profile not found")
-            break
-          }
-
-          // Find the profile in this batch
-          foundProfile = rpcData.find((p: SearchProfilesResult) => p.id === params.id)
-
-          if (foundProfile) {
-            console.log(`✅ Profile found in batch starting at offset ${currentOffset}`)
-            break
-          }
-
-          // Move to next batch
-          currentOffset += batchSize
-          console.log(`🔍 Profile not found in batch ${currentOffset - batchSize}-${currentOffset}, searching next batch...`)
-        }
+        const foundProfile = await fetchProfileById(params.id)
 
         if (!foundProfile) {
-          throw new Error(`Profile ${params.id} not found in any batch`)
+          throw new Error(`Profile ${params.id} not found`)
         }
 
-        // Remove total_count from the profile
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { total_count, ...cleanProfile } = foundProfile
 

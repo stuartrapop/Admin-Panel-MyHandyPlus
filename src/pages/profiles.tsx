@@ -21,6 +21,7 @@ import {
 } from "react-admin";
 import { CustomPagination } from "../components/CustomPagination";
 import { DeleteUserButton } from "../components/DeleteUserButton";
+import { ProfileUpdateRequestButton } from "../components/ProfileUpdateRequestButton";
 import { EmailField } from "../components/EmailField";
 import { GalleryPhotos } from "../components/GalleryPhotos";
 import { GenderDropdown } from "../components/GenderDropdown";
@@ -37,10 +38,10 @@ const profileFilters = [
 		alwaysOn
 	/>,
 	<TextInput
-		key="name"
-		label="Search Full Name"
-		source="name"
-		placeholder="Search by full name..."
+		key="uuid"
+		label="Search by UUID"
+		source="uuid"
+		placeholder="e.g. 5603cd5c-fbd8-40f7-bc39-..."
 		alwaysOn
 	/>,
 	<TextInput
@@ -317,6 +318,9 @@ export const ProfileShow = () => (
 								<StatusDropdown />
 								<GenderDropdown />
 								<DeleteUserButton />
+								<ProfileUpdateRequestButton type="profile-warning-photo" />
+								<ProfileUpdateRequestButton type="profile-warning-bio" />
+								<ProfileUpdateRequestButton type="profile-warning-improvement" />
 							</Box>
 						</Box>
 
