@@ -11,6 +11,7 @@ import { ProfileShow, ProfilesList } from "./pages/profiles";
 import { StaffRolesList } from "./pages/staffRoles";
 import { UserBlocks } from "./pages/userBlocks";
 import UserMapPage from "./pages/UserMapPage";
+import { UserAnalysisPage } from "./pages/UserAnalysisPage";
 import { UsersDeletedList } from "./pages/usersDeleted";
 
 export const App = () => (
@@ -32,6 +33,7 @@ export const App = () => (
     {/* Custom Routes */}
     <CustomRoutes>
       <Route path="/user-map" element={<UserMapPage />} />
+      <Route path="/user-analysis" element={<UserAnalysisPage />} />
       <Route path="/email-preview" element={<EmailPreview />} />
     </CustomRoutes>
   </Admin >

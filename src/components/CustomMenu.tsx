@@ -1,4 +1,5 @@
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
 import BlockIcon from '@mui/icons-material/Block';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -12,6 +13,7 @@ import { Menu } from 'react-admin';
 export const CustomMenu = () => (
 	<Menu>
 		<Menu.DashboardItem leftIcon={<DashboardIcon />} />
+		<Menu.Item to="/user-analysis" primaryText="User Analysis" leftIcon={<AnalyticsIcon />} />
 		<Menu.Item to="/user-map" primaryText="User Map" leftIcon={<MapIcon />} />
 
 		<Menu.ResourceItem name="profiles" leftIcon={<PeopleIcon />} />

@@ -311,6 +311,10 @@ export const ProfileShow = () => (
 									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Email</Typography>
 									<EmailField label="" />
 								</Box>
+								<Box sx={{ mb: 2 }}>
+									<Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Sign-in method</Typography>
+									<TextField source="auth_providers" label="" emptyText="Unknown" />
+								</Box>
 							</Box>
 
 							{/* Right side - Action controls */}

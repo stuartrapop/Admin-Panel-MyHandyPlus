@@ -20,6 +20,7 @@ interface SearchProfilesResult {
   account_status?: string
   gender_value?: string
   profile_photo_url?: string
+  auth_providers?: string
   total_count: number
 }
 
